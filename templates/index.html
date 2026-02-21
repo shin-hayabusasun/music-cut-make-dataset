@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声収録アプリ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>音声収録アプリ</h1>
+
+        <!-- YouTube Download Section -->
+        <section class="section">
+            <h2>YouTube音声ダウンロード</h2>
+            <div id="youtube-urls">
+                <div class="url-input-group">
+                    <input type="text" class="youtube-url" placeholder="YouTube URLを入力">
+                    <button class="remove-url-btn" onclick="removeUrlInput(this)">×</button>
+                </div>
+            </div>
+            <button id="add-url-btn" onclick="addUrlInput()">+ URLを追加</button>
+            <button id="download-btn" onclick="downloadFromYoutube()">ダウンロード開始</button>
+            <div id="youtube-status" class="status"></div>
+            <div id="youtube-results" class="results"></div>
+        </section>
+
+        <!-- File Upload Section -->
+        <section class="section">
+            <h2>音声ファイルをアップロード（切り取り用）</h2>
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="file-input-wrapper">
+                    <input type="file" id="audio-files" name="files[]" multiple accept=".wav,.mp3,.ogg,.flac,.m4a,.webm">
+                    <label for="audio-files" class="file-label">ファイルを選択（複数可）</label>
+                </div>
+                <div id="selected-files" class="selected-files"></div>
+                <button type="button" onclick="uploadFiles()">アップロードして切り取り開始</button>
+            </form>
+        </section>
+
+        <!-- Go to Download Page -->
+        <section class="section">
+            <a href="{{ url_for('download_page') }}" class="nav-link">すべてのファイルを確認・ダウンロード</a>
+        </section>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

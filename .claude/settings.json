@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "*"
+    ],
+    "deny": [
+      "Bash(rm:*)"
+    ]
+  },
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "a01d9e8225cb4faeba942e529e51646e.KsQazbGWcg4Rq78i",
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5"
+  }
+}

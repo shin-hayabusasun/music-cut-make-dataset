@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ダウンロード</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>ファイル一覧とダウンロード</h1>
+
+        <div class="section">
+            <h2>収録したファイル一覧</h2>
+            <div id="files-list" class="files-list">
+                {% if files %}
+                    {% for file in files %}
+                    <div class="file-item" data-filename="{{ file }}">
+                        <span class="file-name">{{ file }}</span>
+                        <div class="file-actions">
+                            <audio controls preload="metadata">
+                                <source src="{{ url_for('get_audio', filename=file) }}" type="audio/wav">
+                            </audio>
+                            <button onclick="deleteFile('{{ file }}')" class="danger">削除</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>ファイルがありません</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="section actions">
+            <a href="{{ url_for('download_zip') }}" class="download-btn">すべてをZIPでダウンロード</a>
+            <a href="{{ url_for('index') }}" class="nav-link">トップに戻る</a>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        async function deleteFile(filename) {
+            if (!confirm(`${filename} を削除しますか？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/delete_file', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const fileItem = document.querySelector(`[data-filename="${filename}"]`);
+                    if (fileItem) {
+                        fileItem.remove();
+                    }
+                }
+            } catch (error) {
+                alert('削除に失敗しました');
+            }
+        }
+    </script>
+</body>
+</html>

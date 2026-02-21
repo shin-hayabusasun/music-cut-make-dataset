@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声切り取り</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .timeline-container {
+            position: relative;
+            width: 100%;
+            height: 80px;
+            background: #1a1a2e;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .waveform {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                rgba(0, 217, 255, 0.1) 0%,
+                rgba(0, 217, 255, 0.3) 50%,
+                rgba(0, 217, 255, 0.1) 100%);
+        }
+
+        .region {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(46, 213, 115, 0.4);
+            border-left: 3px solid #2ed573;
+            border-right: 3px solid #2ed573;
+            cursor: move;
+            min-width: 10px;
+        }
+
+        .region.selected {
+            background: rgba(0, 217, 255, 0.4);
+            border-color: #00d9ff;
+        }
+
+        .handle {
+            position: absolute;
+            top: 0;
+            width: 12px;
+            height: 100%;
+            background: #2ed573;
+            cursor: ew-resize;
+            z-index: 10;
+        }
+
+        .handle:hover {
+            background: #00d9ff;
+        }
+
+        .handle-left {
+            left: -6px;
+            border-radius: 3px 0 0 3px;
+        }
+
+        .handle-right {
+            right: -6px;
+            border-radius: 0 3px 3px 0;
+        }
+
+        .time-marker {
+            position: absolute;
+            bottom: 5px;
+            font-size: 10px;
+            color: #aaa;
+            transform: translateX(-50%);
+        }
+
+        .playhead {
+            position: absolute;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: #ff4757;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .region-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 10px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .region-info input {
+            padding: 8px 12px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 14px;
+            width: 100px;
+        }
+
+        .region-info input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        .region-info label {
+            color: #aaa;
+            font-size: 12px;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .regions-panel {
+            margin-top: 20px;
+        }
+
+        .region-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid transparent;
+        }
+
+        .region-card.active {
+            border-color: #00d9ff;
+        }
+
+        .region-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .region-card-title {
+            font-weight: 600;
+            color: #00d9ff;
+        }
+
+        .region-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            position: relative;
+            margin: 10px 0;
+        }
+
+        .region-bar-fill {
+            position: absolute;
+            height: 100%;
+            background: #2ed573;
+            border-radius: 4px;
+        }
+
+        .region-card-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .region-card-actions button {
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .mini-btn {
+            padding: 5px 10px !important;
+            font-size: 12px !important;
+        }
+
+        .trim-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+
+        .trim-result.success {
+            background: rgba(46, 213, 115, 0.2);
+            color: #2ed573;
+        }
+
+        .trim-result.error {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .output-name-input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>音声切り取り</h1>
+        <div class="progress-info">
+            <p>ファイル <strong>{{ index + 1 }}</strong> / <strong>{{ total }}</strong></p>
+            <p>現在のファイル: <strong>{{ file.original_name }}</strong></p>
+        </div>
+
+        <!-- Audio Player -->
+        <div class="audio-player">
+            <audio id="audio-player" controls>
+                <source src="{{ url_for('get_audio', filename=file.filename) }}" type="audio/wav">
+            </audio>
+        </div>
+
+        <!-- Timeline -->
+        <div class="timeline-section">
+            <div class="time-display">
+                <span>0:00</span>
+                <span id="current-time">0:00</span>
+                <span id="end-time">{{ "%.2f"|format(duration) }}s</span>
+            </div>
+
+            <div class="timeline-container" id="timeline">
+                <div class="waveform"></div>
+                <div class="playhead" id="playhead" style="left: 0%;"></div>
+            </div>
+
+            <div class="controls-row">
+                <button onclick="addRegion()" id="add-region-btn">+ 区間を追加</button>
+                <button onclick="playAllRegions()">全区間を再生</button>
+                <button onclick="trimAllRegions()">全区間を切り取り</button>
+            </div>
+        </div>
+
+        <!-- Regions Panel -->
+        <div class="regions-panel">
+            <h3>切り取り区間一覧</h3>
+            <div id="regions-list"></div>
+        </div>
+
+        <div class="actions">
+            <button onclick="finishFile()">次のファイルへ / 完了</button>
+            <a href="{{ url_for('download_page') }}" class="nav-link">スキップしてダウンロードページへ</a>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const filename = "{{ file.filename }}";
+        const totalDuration = {{ duration }};
+        const timeline = document.getElementById('timeline');
+        const audio = document.getElementById('audio-player');
+        const playhead = document.getElementById('playhead');
+
+        let regions = [];
+        let regionIdCounter = 0;
+        let activeRegionId = null;
+        let isDragging = false;
+        let dragType = null; // 'move', 'left', 'right'
+        let dragStartX = 0;
+        let dragRegion = null;
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 100);
+            return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        }
+
+        function timeToPercent(time) {
+            return (time / totalDuration) * 100;
+        }
+
+        function percentToTime(percent) {
+            return (percent / 100) * totalDuration;
+        }
+
+        function addRegion(startPercent = 0, endPercent = 100) {
+            const id = ++regionIdCounter;
+            const start = percentToTime(startPercent);
+            const end = percentToTime(endPercent);
+
+            regions.push({
+                id,
+                start,
+                end,
+                outputName: `trimmed_${id}.wav`
+            });
+
+            renderTimeline();
+            renderRegionsList();
+            setActiveRegion(id);
+        }
+
+        function removeRegion(id) {
+            regions = regions.filter(r => r.id !== id);
+            renderTimeline();
+            renderRegionsList();
+        }
+
+        function setActiveRegion(id) {
+            activeRegionId = id;
+            renderTimeline();
+            renderRegionsList();
+        }
+
+        function updateRegionTimes(id, start, end) {
+            const region = regions.find(r => r.id === id);
+            if (region) {
+                region.start = Math.max(0, Math.min(start, end - 0.1));
+                region.end = Math.min(totalDuration, Math.max(end, start + 0.1));
+                renderTimeline();
+                renderRegionsList();
+            }
+        }
+
+        function renderTimeline() {
+            // Remove existing region elements
+            document.querySelectorAll('.timeline-region').forEach(el => el.remove());
+
+            regions.forEach(region => {
+                const div = document.createElement('div');
+                div.className = `timeline-region region ${region.id === activeRegionId ? 'selected' : ''}`;
+                div.dataset.id = region.id;
+                div.style.left = `${timeToPercent(region.start)}%`;
+                div.style.width = `${timeToPercent(region.end - region.start)}%`;
+
+                div.innerHTML = `
+                    <div class="handle handle-left" data-handle="left"></div>
+                    <div class="handle handle-right" data-handle="right"></div>
+                `;
+
+                div.addEventListener('mousedown', (e) => handleMouseDown(e, region.id));
+                div.addEventListener('click', (e) => {
+                    if (!isDragging) setActiveRegion(region.id);
+                });
+
+                timeline.appendChild(div);
+            });
+        }
+
+        function renderRegionsList() {
+            const list = document.getElementById('regions-list');
+
+            if (regions.length === 0) {
+                list.innerHTML = '<p style="color: #aaa; text-align: center;">区間を追加してください</p>';
+                return;
+            }
+
+            list.innerHTML = regions.map(region => {
+                const startPercent = timeToPercent(region.start);
+                const widthPercent = timeToPercent(region.end - region.start);
+
+                return `
+                    <div class="region-card ${region.id === activeRegionId ? 'active' : ''}"
+                         onclick="setActiveRegion(${region.id})">
+                        <div class="region-card-header">
+                            <span class="region-card-title">区間 ${region.id}</span>
+                            <button class="mini-btn danger" onclick="event.stopPropagation(); removeRegion(${region.id})">削除</button>
+                        </div>
+                        <div class="region-bar">
+                            <div class="region-bar-fill" style="left: ${startPercent}%; width: ${widthPercent}%;"></div>
+                        </div>
+                        <div style="display: flex; gap: 15px; margin: 10px 0;">
+                            <div>
+                                <label>開始</label>
+                                <input type="number" step="0.1" min="0" max="${totalDuration}"
+                                       value="${region.start.toFixed(2)}"
+                                       onchange="updateRegionTimes(${region.id}, parseFloat(this.value), ${region.end})">
+                            </div>
+                            <div>
+                                <label>終了</label>
+                                <input type="number" step="0.1" min="0" max="${totalDuration}"
+                                       value="${region.end.toFixed(2)}"
+                                       onchange="updateRegionTimes(${region.id}, ${region.start}, parseFloat(this.value))">
+                            </div>
+                            <div style="flex: 1;">
+                                <label>ファイル名</label>
+                                <input type="text" class="output-name-input"
+                                       value="${region.outputName}"
+                                       onchange="updateRegionName(${region.id}, this.value)">
+                            </div>
+                        </div>
+                        <div class="region-card-actions">
+                            <button onclick="event.stopPropagation(); playRegion(${region.id})">再生</button>
+                            <button onclick="event.stopPropagation(); trimRegion(${region.id})">切り取り</button>
+                        </div>
+                        <div id="trim-result-${region.id}" class="trim-result" style="display: none;"></div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateRegionName(id, name) {
+            const region = regions.find(r => r.id === id);
+            if (region) {
+                region.outputName = name || `trimmed_${id}.wav`;
+            }
+        }
+
+        // Drag handling
+        function handleMouseDown(e, regionId) {
+            e.preventDefault();
+            isDragging = true;
+            dragRegion = regions.find(r => r.id === regionId);
+
+            if (e.target.classList.contains('handle-left')) {
+                dragType = 'left';
+            } else if (e.target.classList.contains('handle-right')) {
+                dragType = 'right';
+            } else {
+                dragType = 'move';
+            }
+
+            dragStartX = e.clientX;
+            setActiveRegion(regionId);
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        }
+
+        function handleMouseMove(e) {
+            if (!isDragging || !dragRegion) return;
+
+            const timelineRect = timeline.getBoundingClientRect();
+            const deltaX = e.clientX - dragStartX;
+            const deltaPercent = (deltaX / timelineRect.width) * 100;
+            const deltaTime = percentToTime(deltaPercent);
+
+            if (dragType === 'left') {
+                const newStart = dragRegion.start + deltaTime;
+                if (newStart >= 0 && newStart < dragRegion.end - 0.1) {
+                    dragRegion.start = newStart;
+                    dragStartX = e.clientX;
+                }
+            } else if (dragType === 'right') {
+                const newEnd = dragRegion.end + deltaTime;
+                if (newEnd <= totalDuration && newEnd > dragRegion.start + 0.1) {
+                    dragRegion.end = newEnd;
+                    dragStartX = e.clientX;
+                }
+            } else if (dragType === 'move') {
+                const duration = dragRegion.end - dragRegion.start;
+                let newStart = dragRegion.start + deltaTime;
+                let newEnd = dragRegion.end + deltaTime;
+
+                if (newStart >= 0 && newEnd <= totalDuration) {
+                    dragRegion.start = newStart;
+                    dragRegion.end = newEnd;
+                    dragStartX = e.clientX;
+                }
+            }
+
+            renderTimeline();
+            renderRegionsList();
+        }
+
+        function handleMouseUp() {
+            isDragging = false;
+            dragRegion = null;
+            dragType = null;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        }
+
+        // Playback
+        function playRegion(id) {
+            const region = regions.find(r => r.id === id);
+            if (!region) return;
+
+            audio.currentTime = region.start;
+            audio.play();
+
+            const checkTime = setInterval(() => {
+                if (audio.currentTime >= region.end) {
+                    audio.pause();
+                    clearInterval(checkTime);
+                }
+            }, 50);
+        }
+
+        async function playAllRegions() {
+            for (const region of [...regions].sort((a, b) => a.start - b.start)) {
+                await new Promise(resolve => {
+                    audio.currentTime = region.start;
+                    audio.play();
+
+                    const checkTime = setInterval(() => {
+                        if (audio.currentTime >= region.end) {
+                            audio.pause();
+                            clearInterval(checkTime);
+                            resolve();
+                        }
+                    }, 50);
+                });
+            }
+        }
+
+        // Trimming
+        async function trimRegion(id) {
+            const region = regions.find(r => r.id === id);
+            if (!region) return;
+
+            const resultDiv = document.getElementById(`trim-result-${id}`);
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'trim-result';
+            resultDiv.textContent = '処理中...';
+
+            try {
+                const response = await fetch('/trim_segment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: filename,
+                        start: region.start,
+                        end: region.end,
+                        output_name: region.outputName
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'trim-result success';
+                    resultDiv.textContent = `完了: ${data.output_file}`;
+                } else {
+                    resultDiv.className = 'trim-result error';
+                    resultDiv.textContent = 'エラーが発生しました';
+                }
+            } catch (error) {
+                resultDiv.className = 'trim-result error';
+                resultDiv.textContent = `エラー: ${error.message}`;
+            }
+        }
+
+        async function trimAllRegions() {
+            for (const region of regions) {
+                await trimRegion(region.id);
+            }
+        }
+
+        // Audio player sync
+        audio.addEventListener('timeupdate', () => {
+            const percent = (audio.currentTime / totalDuration) * 100;
+            playhead.style.left = `${percent}%`;
+            document.getElementById('current-time').textContent = formatTime(audio.currentTime);
+        });
+
+        // Click on timeline to seek
+        timeline.addEventListener('click', (e) => {
+            if (e.target.classList.contains('region') ||
+                e.target.classList.contains('handle') ||
+                e.target.closest('.region')) {
+                return;
+            }
+
+            const rect = timeline.getBoundingClientRect();
+            const percent = ((e.clientX - rect.left) / rect.width) * 100;
+            audio.currentTime = percentToTime(Math.max(0, Math.min(100, percent)));
+        });
+
+        // Finish
+        async function finishFile() {
+            const status = document.getElementById('status');
+            status.innerHTML = '移動中...';
+
+            try {
+                const response = await fetch('/next_file');
+                const data = await response.json();
+                window.location.href = data.redirect;
+            } catch (error) {
+                status.innerHTML = `<span class="error">エラー: ${error.message}</span>`;
+            }
+        }
+
+        // Initialize with one region (25% - 75%)
+        addRegion(25, 75);
+    </script>
+</body>
+</html>
